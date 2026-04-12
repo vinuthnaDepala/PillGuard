@@ -1,14 +1,45 @@
 const STATE_STYLES = {
-  TOOK_PILL: { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', label: 'Took Pill' },
-  NO_TAKE:   { bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-200', label: 'No Take' },
-  DISTRESS:  { bg: 'bg-red-100',   text: 'text-red-800',   border: 'border-red-200',   label: 'Distress' },
-  NO_SHOW:   { bg: 'bg-gray-100',  text: 'text-gray-800',  border: 'border-gray-200',  label: 'No Show' },
+  TOOK_PILL: {
+    bg: '#EDF5EE',
+    text: '#4A7A4C',
+    border: '#C8DCC9',
+    badgeBg: '#C8DCC9',
+    badgeText: '#3D5135',
+    label: 'Took Pill',
+  },
+  NO_TAKE: {
+    bg: '#FFFBEB',
+    text: '#92400E',
+    border: '#FDE68A',
+    badgeBg: '#FDE68A',
+    badgeText: '#78350F',
+    label: 'No Take',
+  },
+  DISTRESS: {
+    bg: '#FEF2F2',
+    text: '#B91C1C',
+    border: '#FECACA',
+    badgeBg: '#FECACA',
+    badgeText: '#991B1B',
+    label: 'Distress',
+  },
+  NO_SHOW: {
+    bg: '#F5F2EB',
+    text: '#5A6B5B',
+    border: '#E8E2D5',
+    badgeBg: '#E8E2D5',
+    badgeText: '#4A5568',
+    label: 'No Show',
+  },
 }
 
 function StateBadge({ state }) {
   const style = STATE_STYLES[state] || STATE_STYLES.NO_SHOW
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}>
+    <span
+      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"
+      style={{ background: style.badgeBg, color: style.badgeText }}
+    >
       {style.label}
     </span>
   )
@@ -23,29 +54,48 @@ function formatTime(timestamp) {
 export default function AlertFeed({ events = [] }) {
   if (events.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <h3 className="text-lg font-semibold text-slate-800 mb-3">Recent Alerts</h3>
-        <p className="text-slate-400 text-sm">No data yet</p>
+      <div
+        className="rounded-2xl p-6 shadow-sm"
+        style={{ background: 'var(--cream-card)', border: '1px solid var(--cream-border)' }}
+      >
+        <h3 className="text-base font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+          Recent Alerts
+        </h3>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No data yet</p>
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6">
-      <h3 className="text-lg font-semibold text-slate-800 mb-3">Recent Alerts</h3>
+    <div
+      className="rounded-2xl p-6 shadow-sm"
+      style={{ background: 'var(--cream-card)', border: '1px solid var(--cream-border)' }}
+    >
+      <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+        Recent Alerts
+      </h3>
       <div className="space-y-2">
-        {events.slice(0, 10).map((event) => (
-          <div
-            key={event.id}
-            className={`flex items-center justify-between p-3 rounded-lg border ${STATE_STYLES[event.state]?.border || 'border-slate-200'} ${STATE_STYLES[event.state]?.bg || 'bg-slate-50'}`}
-          >
-            <div className="flex items-center gap-3">
-              <StateBadge state={event.state} />
-              <span className="text-sm text-slate-600">{event.reason || ''}</span>
+        {events.slice(0, 10).map((event) => {
+          const style = STATE_STYLES[event.state] || STATE_STYLES.NO_SHOW
+          return (
+            <div
+              key={event.id}
+              className="flex items-center justify-between p-3 rounded-xl"
+              style={{
+                background: style.bg,
+                border: `1px solid ${style.border}`,
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <StateBadge state={event.state} />
+                <span className="text-sm" style={{ color: style.text }}>{event.reason || ''}</span>
+              </div>
+              <span className="text-xs whitespace-nowrap ml-2" style={{ color: 'var(--text-muted)' }}>
+                {formatTime(event.timestamp)}
+              </span>
             </div>
-            <span className="text-xs text-slate-400 whitespace-nowrap ml-2">{formatTime(event.timestamp)}</span>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

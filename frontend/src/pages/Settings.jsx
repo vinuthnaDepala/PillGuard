@@ -2,6 +2,36 @@ import { useState, useEffect } from 'react'
 
 const API = '/api'
 
+const inputStyle = {
+  width: '100%',
+  padding: '0.6rem 0.75rem',
+  border: '1px solid var(--cream-border)',
+  borderRadius: '0.75rem',
+  fontSize: '0.875rem',
+  background: 'var(--cream)',
+  color: 'var(--text-primary)',
+  outline: 'none',
+  transition: 'border-color 0.15s, box-shadow 0.15s',
+  boxSizing: 'border-box',
+}
+
+const inputFocusStyle = {
+  borderColor: 'var(--sage)',
+  boxShadow: '0 0 0 3px rgba(139,175,140,0.18)',
+}
+
+function StyledInput({ style, ...props }) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <input
+      {...props}
+      style={{ ...inputStyle, ...(focused ? inputFocusStyle : {}), ...style }}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+    />
+  )
+}
+
 export default function Settings() {
   const [patient, setPatient] = useState(null)
   const [name, setName] = useState('')
@@ -48,14 +78,12 @@ export default function Settings() {
     setMessage('')
 
     try {
-      // Update patient info
       await fetch(`${API}/patient/1`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, caretaker_name: caretakerName, caretaker_phone: caretakerPhone }),
       })
 
-      // Update schedule
       await fetch(`${API}/patient/1/schedule`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -71,63 +99,106 @@ export default function Settings() {
   }
 
   if (loading) {
-    return <div className="text-center py-12 text-slate-400">Loading...</div>
+    return (
+      <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
+        Loading...
+      </div>
+    )
   }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800">Settings</h1>
+      <div>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+          Settings
+        </h1>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
+          Manage patient and caretaker information
+        </p>
+      </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-        {/* Patient Name */}
+      <div
+        className="rounded-2xl p-6 shadow-sm space-y-5"
+        style={{ background: 'var(--cream-card)', border: '1px solid var(--cream-border)' }}
+      >
+        {/* Section: Patient Info */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Patient Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
+          <p
+            className="text-xs font-semibold uppercase tracking-wider mb-4"
+            style={{ color: 'var(--sage-dark)' }}
+          >
+            Patient Information
+          </p>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                Patient Name
+              </label>
+              <StyledInput
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                Caretaker Name
+              </label>
+              <StyledInput
+                type="text"
+                value={caretakerName}
+                onChange={(e) => setCaretakerName(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                Caretaker Phone
+              </label>
+              <StyledInput
+                type="tel"
+                value={caretakerPhone}
+                onChange={(e) => setCaretakerPhone(e.target.value)}
+                placeholder="+1xxxxxxxxxx"
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Caretaker Name */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Caretaker Name</label>
-          <input
-            type="text"
-            value={caretakerName}
-            onChange={(e) => setCaretakerName(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
+        {/* Divider */}
+        <div style={{ borderTop: '1px solid var(--cream-border)' }} />
 
-        {/* Caretaker Phone */}
+        {/* Section: Schedule */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Caretaker Phone</label>
-          <input
-            type="tel"
-            value={caretakerPhone}
-            onChange={(e) => setCaretakerPhone(e.target.value)}
-            placeholder="+1xxxxxxxxxx"
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-
-        {/* Pill Schedule */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Pill Schedule</label>
+          <p
+            className="text-xs font-semibold uppercase tracking-wider mb-4"
+            style={{ color: 'var(--sage-dark)' }}
+          >
+            Pill Schedule
+          </p>
           <div className="space-y-2">
             {schedule.map((entry, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="flex items-center gap-3">
                 <input
                   type="time"
                   value={entry.time}
                   onChange={(e) => updateTime(i, e.target.value)}
-                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  style={{
+                    ...inputStyle,
+                    width: 'auto',
+                  }}
                 />
                 <button
                   onClick={() => removeTime(i)}
-                  className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  className="px-3 py-2 text-sm rounded-xl transition-colors"
+                  style={{
+                    color: '#B91C1C',
+                    background: '#FEF2F2',
+                    border: '1px solid #FECACA',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#FEE2E2'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = '#FEF2F2'}
                 >
                   Remove
                 </button>
@@ -136,35 +207,53 @@ export default function Settings() {
           </div>
           <button
             onClick={addTime}
-            className="mt-2 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-blue-200"
+            className="mt-3 px-4 py-2 text-sm rounded-xl transition-colors font-medium"
+            style={{
+              color: 'var(--sage-dark)',
+              background: 'var(--sage-xlight)',
+              border: '1px solid var(--sage-light)',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--sage-light)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'var(--sage-xlight)'}
           >
             + Add Time
           </button>
         </div>
 
+        {/* Divider */}
+        <div style={{ borderTop: '1px solid var(--cream-border)' }} />
+
         {/* Weekly Pill Count */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Weekly Pill Count</label>
+          <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+            Weekly Pill Count
+          </label>
           <input
             type="number"
             min="1"
             value={weeklyPillCount}
             onChange={(e) => setWeeklyPillCount(parseInt(e.target.value) || 1)}
-            className="w-32 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            style={{ ...inputStyle, width: '8rem' }}
           />
         </div>
 
         {/* Save */}
-        <div className="pt-2">
+        <div className="pt-1">
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+            className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm disabled:opacity-50"
+            style={{ background: 'var(--olive)' }}
+            onMouseEnter={(e) => !saving && (e.currentTarget.style.background = 'var(--sage-dark)')}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'var(--olive)'}
           >
             {saving ? 'Saving...' : 'Save Settings'}
           </button>
           {message && (
-            <p className={`mt-2 text-sm ${message.includes('Failed') ? 'text-red-600' : 'text-green-600'}`}>
+            <p
+              className="mt-2 text-sm font-medium"
+              style={{ color: message.includes('Failed') ? '#B91C1C' : 'var(--sage-dark)' }}
+            >
               {message}
             </p>
           )}

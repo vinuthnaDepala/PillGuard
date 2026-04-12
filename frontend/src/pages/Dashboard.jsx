@@ -48,12 +48,15 @@ export default function Dashboard() {
   }, [])
 
   if (!patient && !error) {
-    return <div className="text-center py-12 text-slate-400">Loading...</div>
+    return (
+      <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
+        Loading...
+      </div>
+    )
   }
 
   const lastEvent = events && events.length > 0 ? events[0] : null
 
-  // Build today's schedule status
   const scheduleItems = (patient?.pill_schedule || []).map((entry) => {
     const now = new Date()
     const [h, m] = entry.time.split(':').map(Number)
@@ -61,7 +64,6 @@ export default function Dashboard() {
     const isPast = now > new Date(pillTime.getTime() + 30 * 60000)
     const isCurrent = Math.abs(now - pillTime) <= 30 * 60000
 
-    // Check if there's a TOOK_PILL event near this time today
     const todayStr = now.toISOString().slice(0, 10)
     const taken = events?.some((e) => {
       if (e.state !== 'TOOK_PILL') return false
@@ -79,7 +81,6 @@ export default function Dashboard() {
     return { time: entry.time, status }
   })
 
-  // Streak calculation
   let streak = 0
   if (stats?.daily_adherence) {
     const days = [...stats.daily_adherence].reverse()
@@ -89,71 +90,124 @@ export default function Dashboard() {
     }
   }
 
+  const scheduleStatusStyles = {
+    taken: {
+      background: 'var(--sage-xlight)',
+      border: '1px solid var(--sage-light)',
+      color: 'var(--sage-dark)',
+    },
+    missed: {
+      background: '#FEF2F2',
+      border: '1px solid #FECACA',
+      color: '#B91C1C',
+    },
+    current: {
+      background: '#EFF6FF',
+      border: '1px solid #BFDBFE',
+      color: '#1D4ED8',
+    },
+    upcoming: {
+      background: 'var(--cream)',
+      border: '1px solid var(--cream-border)',
+      color: 'var(--text-muted)',
+    },
+  }
+
   return (
     <div className="space-y-6">
       {error && (
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-sm">
+        <div
+          className="p-3 rounded-xl text-sm"
+          style={{
+            background: '#FFFBEB',
+            border: '1px solid #FDE68A',
+            color: '#92400E',
+          }}
+        >
           Backend unreachable — showing cached data
         </div>
       )}
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">{patient?.name || 'Patient'}'s Dashboard</h1>
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+            {patient?.name || 'Patient'}'s Dashboard
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            Medication tracking overview
+          </p>
+        </div>
+        <div
+          className="px-4 py-2 rounded-xl text-sm font-medium text-white shadow-sm"
+          style={{ background: 'var(--olive)' }}
+        >
+          Live
+        </div>
+      </div>
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Today Taken', value: stats?.today_taken ?? '—', color: 'var(--sage-dark)', icon: '✓' },
+          { label: 'Today Missed', value: stats?.today_missed ?? '—', color: '#B91C1C', icon: '⚠️' },
+          { label: 'Week Adherence', value: stats?.week_adherence_pct != null ? `${stats.week_adherence_pct}%` : '—', color: 'var(--sage-dark)', icon: '📊' },
+          { label: 'Current Streak', value: `${streak}d`, color: 'var(--olive)', icon: '🔥' },
+        ].map(({ label, value, color, icon }) => (
+          <div
+            key={label}
+            className="rounded-2xl p-5 shadow-sm"
+            style={{ background: 'var(--cream-card)', border: '1px solid var(--cream-border)' }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{label}</p>
+              <span className="text-base">{icon}</span>
+            </div>
+            <p className="text-2xl font-bold" style={{ color }}>{value}</p>
+          </div>
+        ))}
       </div>
 
       {/* Today's Schedule */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <h3 className="text-lg font-semibold text-slate-800 mb-3">Today's Schedule</h3>
+      <div
+        className="rounded-2xl p-6 shadow-sm"
+        style={{ background: 'var(--cream-card)', border: '1px solid var(--cream-border)' }}
+      >
+        <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+          Today's Schedule
+        </h3>
         {scheduleItems.length === 0 ? (
-          <p className="text-slate-400 text-sm">No schedule configured</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No schedule configured</p>
         ) : (
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-3">
             {scheduleItems.map((item) => (
               <div
                 key={item.time}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${
-                  item.status === 'taken' ? 'bg-green-50 border-green-200 text-green-700' :
-                  item.status === 'missed' ? 'bg-red-50 border-red-200 text-red-700' :
-                  item.status === 'current' ? 'bg-blue-50 border-blue-200 text-blue-700' :
-                  'bg-slate-50 border-slate-200 text-slate-500'
-                }`}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl"
+                style={scheduleStatusStyles[item.status]}
               >
-                <span className="font-mono font-medium">{item.time}</span>
-                <span className="text-xs capitalize">{item.status}</span>
+                <span className="font-mono font-semibold text-sm">{item.time}</span>
+                <span className="text-xs capitalize opacity-80">{item.status}</span>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">Today Taken</p>
-          <p className="text-2xl font-bold text-green-600">{stats?.today_taken ?? '—'}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">Today Missed</p>
-          <p className="text-2xl font-bold text-red-600">{stats?.today_missed ?? '—'}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">Week Adherence</p>
-          <p className="text-2xl font-bold text-blue-600">{stats?.week_adherence_pct ?? '—'}%</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">Current Streak</p>
-          <p className="text-2xl font-bold text-purple-600">{streak} day{streak !== 1 ? 's' : ''}</p>
-        </div>
-      </div>
-
       {/* Last Event */}
       {lastEvent && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="text-lg font-semibold text-slate-800 mb-3">Last Event</h3>
+        <div
+          className="rounded-2xl p-6 shadow-sm"
+          style={{ background: 'var(--cream-card)', border: '1px solid var(--cream-border)' }}
+        >
+          <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+            Last Event
+          </h3>
           <div className="flex items-center gap-3">
             <StateBadge state={lastEvent.state} />
-            <span className="text-sm text-slate-600">{lastEvent.reason}</span>
-            <span className="text-xs text-slate-400 ml-auto">{formatTime(lastEvent.timestamp)}</span>
+            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{lastEvent.reason}</span>
+            <span className="text-xs ml-auto" style={{ color: 'var(--text-muted)' }}>
+              {formatTime(lastEvent.timestamp)}
+            </span>
           </div>
         </div>
       )}
