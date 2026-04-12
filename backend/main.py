@@ -69,6 +69,7 @@ class PatientUpdate(BaseModel):
     name: str
     caretaker_name: Optional[str] = None
     caretaker_phone: Optional[str] = None
+    caretaker_email: Optional[str] = None
 
 
 # --- Endpoints ---
@@ -82,13 +83,14 @@ def create_event(req: EventRequest):
 
     log_event(req.patient_id, req.state, req.confidence, req.reason, req.unscheduled)
 
-    # Send SMS alert (don't block on failure)
+    # Send SMS + email alert (don't block on failure)
     try:
         send_event_alert(
             patient["name"],
             patient.get("caretaker_phone", ""),
             req.state,
             req.unscheduled,
+            caretaker_email=patient.get("caretaker_email") or os.getenv("CARETAKER_EMAIL"),
         )
     except Exception as e:
         logger.error(f"Alert failed: {e}")
@@ -130,7 +132,7 @@ def update_patient_info(patient_id: int, req: PatientUpdate):
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    update_patient(patient_id, req.name, req.caretaker_name, req.caretaker_phone)
+    update_patient(patient_id, req.name, req.caretaker_name, req.caretaker_phone, req.caretaker_email)
     return {"status": "ok"}
 
 
