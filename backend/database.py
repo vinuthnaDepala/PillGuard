@@ -22,10 +22,17 @@ def init_db():
             name TEXT NOT NULL,
             caretaker_name TEXT,
             caretaker_phone TEXT,
+            caretaker_email TEXT,
             pill_schedule TEXT,
             weekly_pill_count INTEGER DEFAULT 14
         )
     """)
+
+    # Migration: add caretaker_email column if it doesn't exist (for existing DBs)
+    cursor.execute("PRAGMA table_info(patients)")
+    cols = [row[1] for row in cursor.fetchall()]
+    if "caretaker_email" not in cols:
+        cursor.execute("ALTER TABLE patients ADD COLUMN caretaker_email TEXT")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS events (
@@ -45,8 +52,16 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         default_schedule = json.dumps([{"time": "08:00"}, {"time": "20:00"}])
         cursor.execute(
-            "INSERT INTO patients (id, name, caretaker_name, caretaker_phone, pill_schedule, weekly_pill_count) VALUES (?, ?, ?, ?, ?, ?)",
-            (1, "Eleanor", "Sarah", os.getenv("CARETAKER_PHONE", "+1xxxxxxxxxx"), default_schedule, 14),
+            "INSERT INTO patients (id, name, caretaker_name, caretaker_phone, caretaker_email, pill_schedule, weekly_pill_count) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                1,
+                "Eleanor",
+                "Sarah",
+                os.getenv("CARETAKER_PHONE", "+1xxxxxxxxxx"),
+                os.getenv("CARETAKER_EMAIL", ""),
+                default_schedule,
+                14,
+            ),
         )
 
     conn.commit()
@@ -90,11 +105,11 @@ def update_patient_schedule(patient_id, pill_schedule, weekly_pill_count):
     conn.close()
 
 
-def update_patient(patient_id, name, caretaker_name, caretaker_phone):
+def update_patient(patient_id, name, caretaker_name, caretaker_phone, caretaker_email=None):
     conn = get_connection()
     conn.execute(
-        "UPDATE patients SET name = ?, caretaker_name = ?, caretaker_phone = ? WHERE id = ?",
-        (name, caretaker_name, caretaker_phone, patient_id),
+        "UPDATE patients SET name = ?, caretaker_name = ?, caretaker_phone = ?, caretaker_email = ? WHERE id = ?",
+        (name, caretaker_name, caretaker_phone, caretaker_email, patient_id),
     )
     conn.commit()
     conn.close()
