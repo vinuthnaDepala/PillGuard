@@ -99,11 +99,12 @@ def set_leds(green, red):
         print(f"[GPIO] Green LED: {g}, Red LED: {r}")
 
 
-def buzz(duration=0.5):
+def buzz(duration=0.5, freq=1000):
     if HAS_GPIO:
-        GPIO.output(BUZZER_PIN, True)
+        pwm = GPIO.PWM(BUZZER_PIN, freq)
+        pwm.start(50)  # 50% duty cycle
         time.sleep(duration)
-        GPIO.output(BUZZER_PIN, False)
+        pwm.stop()
     else:
         print(f"[GPIO] Buzzer: ON for {duration}s")
 
