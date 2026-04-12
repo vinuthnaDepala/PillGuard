@@ -156,21 +156,36 @@ def is_within_pill_window():
 
 # --- Camera Capture ---
 
+NUM_FRAMES = 15
+CAPTURE_DURATION_SECONDS = 15
+FRAMES_ARCHIVE_DIR = os.path.expanduser("~/pillguard_frames")
+
+
 def capture_frames(simulate=False, test_image=None):
-    """Capture 18 frames over 45 seconds (one every 5 seconds)."""
+    """Capture NUM_FRAMES frames over CAPTURE_DURATION_SECONDS seconds.
+    Saves to a timestamped folder in ~/pillguard_frames/ so they can be reviewed later.
+    Returns (frames_list, archive_dir).
+    """
     frames = []
+    interval = CAPTURE_DURATION_SECONDS / NUM_FRAMES
+
+    # Create timestamped archive folder for this capture
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    archive_dir = os.path.join(FRAMES_ARCHIVE_DIR, timestamp)
+    os.makedirs(archive_dir, exist_ok=True)
+    logger.info(f"Saving frames to {archive_dir}")
 
     if simulate:
         logger.info("Simulation mode: using test image for all frames")
-        for i in range(18):
+        for i in range(NUM_FRAMES):
             frame_path = test_image or os.path.join(os.path.dirname(__file__), "test_frame.jpg")
             if os.path.exists(frame_path):
                 frames.append(frame_path)
             else:
                 logger.warning(f"Test image not found: {frame_path}")
-            if i < 17:
+            if i < NUM_FRAMES - 1:
                 time.sleep(1)  # Shorter delay in simulation
-        return frames
+        return frames, archive_dir
 
     try:
         import cv2
@@ -180,32 +195,36 @@ def capture_frames(simulate=False, test_image=None):
 
         if not cap.isOpened():
             logger.error("Failed to open webcam")
-            return frames
+            return frames, archive_dir
 
-        for i in range(18):
+        for i in range(NUM_FRAMES):
             ret, frame = cap.read()
             if ret:
-                path = f"/tmp/frame_{i}.jpg"
+                path = os.path.join(archive_dir, f"frame_{i:02d}.jpg")
                 cv2.imwrite(path, frame)
                 frames.append(path)
-                logger.info(f"Captured frame {i + 1}/18")
+                logger.info(f"Captured frame {i + 1}/{NUM_FRAMES}")
             else:
                 logger.warning(f"Failed to capture frame {i + 1}")
 
-            if i < 17:
-                time.sleep(2.5)
+            if i < NUM_FRAMES - 1:
+                time.sleep(interval)
 
         cap.release()
     except ImportError:
         logger.error("OpenCV not installed — cannot capture frames")
 
-    return frames
+    return frames, archive_dir
 
 
-def cleanup_frames(frames):
-    for path in frames:
-        if path.startswith("/tmp/") and os.path.exists(path):
-            os.remove(path)
+def save_results_log(archive_dir, results, final):
+    """Save classification results alongside the frames for review."""
+    try:
+        log_path = os.path.join(archive_dir, "results.json")
+        with open(log_path, "w") as f:
+            json.dump({"frame_results": results, "final": final}, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save results log: {e}")
 
 
 # --- Backend POST ---
@@ -286,7 +305,7 @@ def run(simulate=False, test_image=None):
             lcd_display("pill_time")
 
             # Capture and classify frames
-            frames = capture_frames(simulate=simulate, test_image=test_image)
+            frames, archive_dir = capture_frames(simulate=simulate, test_image=test_image)
             logger.info(f"Captured {len(frames)} frames, classifying...")
 
             results = []
@@ -301,6 +320,10 @@ def run(simulate=False, test_image=None):
             state = final["state"]
             logger.info(f"Final classification: {state} (confidence: {final['confidence']})")
 
+            # Save results alongside frames for review
+            save_results_log(archive_dir, results, final)
+            logger.info(f"Frames and results saved to {archive_dir}")
+
             # GPIO feedback
             handle_result(state)
 
@@ -309,9 +332,6 @@ def run(simulate=False, test_image=None):
 
             # Post to backend
             post_event(state, final["confidence"], final["reason"], unscheduled)
-
-            # Cleanup temp frames
-            cleanup_frames(frames)
 
             # Keep result display for 10 seconds then return to idle
             time.sleep(10)
