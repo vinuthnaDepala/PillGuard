@@ -157,18 +157,18 @@ def is_within_pill_window():
 # --- Camera Capture ---
 
 def capture_frames(simulate=False, test_image=None):
-    """Capture 9 frames over 45 seconds (one every 5 seconds)."""
+    """Capture 18 frames over 45 seconds (one every 5 seconds)."""
     frames = []
 
     if simulate:
         logger.info("Simulation mode: using test image for all frames")
-        for i in range(9):
+        for i in range(18):
             frame_path = test_image or os.path.join(os.path.dirname(__file__), "test_frame.jpg")
             if os.path.exists(frame_path):
                 frames.append(frame_path)
             else:
                 logger.warning(f"Test image not found: {frame_path}")
-            if i < 8:
+            if i < 17:
                 time.sleep(1)  # Shorter delay in simulation
         return frames
 
@@ -182,18 +182,18 @@ def capture_frames(simulate=False, test_image=None):
             logger.error("Failed to open webcam")
             return frames
 
-        for i in range(9):
+        for i in range(18):
             ret, frame = cap.read()
             if ret:
                 path = f"/tmp/frame_{i}.jpg"
                 cv2.imwrite(path, frame)
                 frames.append(path)
-                logger.info(f"Captured frame {i + 1}/9")
+                logger.info(f"Captured frame {i + 1}/18")
             else:
                 logger.warning(f"Failed to capture frame {i + 1}")
 
-            if i < 8:
-                time.sleep(5)
+            if i < 17:
+                time.sleep(2.5)
 
         cap.release()
     except ImportError:
