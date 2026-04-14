@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -12,7 +12,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from pi.claude_vision import classify_frame, final_classification
+from pi.claude_vision import classify_sequence
 from pi.lcd_controller import display as lcd_display
 
 import requests
@@ -131,46 +131,167 @@ def handle_result(state):
 
 # --- Schedule Check ---
 
-def is_within_pill_window():
-    """Check if current time is within ±30 min of any scheduled pill time."""
+REMINDER_WINDOW_MINUTES = 30        # how long after pill time to keep reminding
+REMINDER_BUZZ_INTERVAL = 5          # seconds between reminder buzzes
+EARLY_WINDOW_MINUTES = 30           # how many minutes BEFORE scheduled time still counts as on-schedule
+
+# Module state for reminder tracking
+_handled_reminders = set()          # "YYYY-MM-DD HH:MM" strings that have been handled
+_last_reminder_buzz = 0
+
+
+def _fetch_schedule():
+    """Fetch the patient's pill schedule from the backend."""
     try:
         resp = requests.get(f"{BACKEND_URL}/patient/{PATIENT_ID}", timeout=5)
         patient = resp.json()
         schedule = patient.get("pill_schedule", [])
         if isinstance(schedule, str):
             schedule = json.loads(schedule)
-
-        now = datetime.now()
-        for entry in schedule:
-            pill_time = datetime.strptime(entry["time"], "%H:%M").replace(
-                year=now.year, month=now.month, day=now.day
-            )
-            diff = abs((now - pill_time).total_seconds())
-            if diff <= 1800:  # 30 minutes
-                return True
-        return False
+        return schedule
     except Exception as e:
-        logger.error(f"Failed to check schedule: {e}")
+        logger.error(f"Failed to fetch schedule: {e}")
+        return []
+
+
+def _fetch_recent_events(limit=20):
+    """Fetch recent events from the backend."""
+    try:
+        resp = requests.get(f"{BACKEND_URL}/events/{PATIENT_ID}?limit={limit}", timeout=5)
+        return resp.json()
+    except Exception as e:
+        logger.error(f"Failed to fetch events: {e}")
+        return []
+
+
+def is_within_pill_window():
+    """Check if current time is within ±30 min of any scheduled pill time."""
+    schedule = _fetch_schedule()
+    if not schedule:
         return True  # Default to scheduled if we can't check
+
+    now = datetime.now()
+    for entry in schedule:
+        pill_time = datetime.strptime(entry["time"], "%H:%M").replace(
+            year=now.year, month=now.month, day=now.day
+        )
+        diff = abs((now - pill_time).total_seconds())
+        if diff <= 1800:  # 30 minutes
+            return True
+    return False
+
+
+def _parse_event_timestamp(ts_str):
+    """Parse a timestamp string from the backend (SQLite CURRENT_TIMESTAMP format)."""
+    try:
+        return datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        try:
+            return datetime.fromisoformat(ts_str.replace("Z", ""))
+        except Exception:
+            return None
+
+
+def _already_taken_for_slot(pill_time):
+    """Check if a TOOK_PILL event already exists for this pill time slot.
+
+    Slot window: [pill_time - EARLY_WINDOW_MINUTES, pill_time + REMINDER_WINDOW_MINUTES]
+    """
+    events = _fetch_recent_events(limit=30)
+    window_start = pill_time - timedelta(minutes=EARLY_WINDOW_MINUTES)
+    window_end = pill_time + timedelta(minutes=REMINDER_WINDOW_MINUTES)
+    for e in events:
+        if e.get("state") != "TOOK_PILL":
+            continue
+        ts = _parse_event_timestamp(e.get("timestamp", ""))
+        if ts and window_start <= ts <= window_end:
+            return True
+    return False
+
+
+def get_active_reminder():
+    """Return the scheduled pill time ('HH:MM') that needs an active reminder, or None.
+
+    A reminder is active when:
+      - Current time is between scheduled time and scheduled + REMINDER_WINDOW_MINUTES
+      - No TOOK_PILL event exists yet for this slot
+      - The slot hasn't been marked as handled (box opened) yet this loop
+    """
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    schedule = _fetch_schedule()
+
+    for entry in schedule:
+        time_str = entry["time"]
+        slot_key = f"{today_str} {time_str}"
+
+        if slot_key in _handled_reminders:
+            continue
+
+        pill_time = datetime.strptime(time_str, "%H:%M").replace(
+            year=now.year, month=now.month, day=now.day
+        )
+
+        # Only active from scheduled time until +REMINDER_WINDOW_MINUTES
+        if pill_time <= now <= pill_time + timedelta(minutes=REMINDER_WINDOW_MINUTES):
+            if _already_taken_for_slot(pill_time):
+                _handled_reminders.add(slot_key)
+                continue
+            return time_str
+
+    return None
+
+
+def mark_current_reminder_handled():
+    """Mark the currently-active reminder slot as handled (called when sensor triggers)."""
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    schedule = _fetch_schedule()
+
+    for entry in schedule:
+        time_str = entry["time"]
+        pill_time = datetime.strptime(time_str, "%H:%M").replace(
+            year=now.year, month=now.month, day=now.day
+        )
+        if pill_time <= now <= pill_time + timedelta(minutes=REMINDER_WINDOW_MINUTES):
+            slot_key = f"{today_str} {time_str}"
+            _handled_reminders.add(slot_key)
+            logger.info(f"Reminder for {time_str} marked as handled (sensor triggered)")
+            return
 
 
 # --- Camera Capture ---
 
+NUM_FRAMES = 15
+CAPTURE_DURATION_SECONDS = 15
+FRAMES_ARCHIVE_DIR = os.path.expanduser("~/pillguard_frames")
+
+
 def capture_frames(simulate=False, test_image=None):
-    """Capture 18 frames over 45 seconds (one every 5 seconds)."""
+    """Capture NUM_FRAMES frames over CAPTURE_DURATION_SECONDS seconds.
+    Saves to a timestamped folder in ~/pillguard_frames/ so they can be reviewed later.
+    Returns (frames_list, archive_dir).
+    """
     frames = []
+    interval = CAPTURE_DURATION_SECONDS / NUM_FRAMES
+
+    # Create timestamped archive folder for this capture
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    archive_dir = os.path.join(FRAMES_ARCHIVE_DIR, timestamp)
+    os.makedirs(archive_dir, exist_ok=True)
+    logger.info(f"Saving frames to {archive_dir}")
 
     if simulate:
         logger.info("Simulation mode: using test image for all frames")
-        for i in range(18):
+        for i in range(NUM_FRAMES):
             frame_path = test_image or os.path.join(os.path.dirname(__file__), "test_frame.jpg")
             if os.path.exists(frame_path):
                 frames.append(frame_path)
             else:
                 logger.warning(f"Test image not found: {frame_path}")
-            if i < 17:
+            if i < NUM_FRAMES - 1:
                 time.sleep(1)  # Shorter delay in simulation
-        return frames
+        return frames, archive_dir
 
     try:
         import cv2
@@ -180,32 +301,36 @@ def capture_frames(simulate=False, test_image=None):
 
         if not cap.isOpened():
             logger.error("Failed to open webcam")
-            return frames
+            return frames, archive_dir
 
-        for i in range(18):
+        for i in range(NUM_FRAMES):
             ret, frame = cap.read()
             if ret:
-                path = f"/tmp/frame_{i}.jpg"
+                path = os.path.join(archive_dir, f"frame_{i:02d}.jpg")
                 cv2.imwrite(path, frame)
                 frames.append(path)
-                logger.info(f"Captured frame {i + 1}/18")
+                logger.info(f"Captured frame {i + 1}/{NUM_FRAMES}")
             else:
                 logger.warning(f"Failed to capture frame {i + 1}")
 
-            if i < 17:
-                time.sleep(2.5)
+            if i < NUM_FRAMES - 1:
+                time.sleep(interval)
 
         cap.release()
     except ImportError:
         logger.error("OpenCV not installed — cannot capture frames")
 
-    return frames
+    return frames, archive_dir
 
 
-def cleanup_frames(frames):
-    for path in frames:
-        if path.startswith("/tmp/") and os.path.exists(path):
-            os.remove(path)
+def save_results_log(archive_dir, results, final):
+    """Save classification results alongside the frames for review."""
+    try:
+        log_path = os.path.join(archive_dir, "results.json")
+        with open(log_path, "w") as f:
+            json.dump({"frame_results": results, "final": final}, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save results log: {e}")
 
 
 # --- Backend POST ---
@@ -241,11 +366,14 @@ def _fallback_log(payload):
 # --- Main Loop ---
 
 def run(simulate=False, test_image=None):
+    global _last_reminder_buzz
     logger.info(f"PillGuard starting (simulate={simulate})")
     lcd_display("idle")
 
     last_trigger_time = 0
     trigger_readings = []
+    reminder_active = False
+    led_toggle = False
 
     try:
         while True:
@@ -253,6 +381,26 @@ def run(simulate=False, test_image=None):
                 input("\n[SIM] Press ENTER to simulate box opening...")
                 triggered = True
             else:
+                # --- Active reminder check (buzz + flash LEDs until sensor triggered) ---
+                active_slot = get_active_reminder()
+                if active_slot:
+                    if not reminder_active:
+                        logger.info(f"Reminder ACTIVE for {active_slot} — buzzing + flashing until box opens")
+                        lcd_display("pill_time")
+                        reminder_active = True
+                    # Flash LEDs alternately so deaf patients get a visual signal
+                    led_toggle = not led_toggle
+                    set_leds(green=led_toggle, red=not led_toggle)
+                    # Near-continuous buzzing — short pulse every loop iteration
+                    buzz(0.2, freq=2000)
+                else:
+                    if reminder_active:
+                        logger.info("Reminder cleared")
+                        lcd_display("idle")
+                        set_leds(green=False, red=False)
+                        reminder_active = False
+                        led_toggle = False
+
                 distance = read_distance()
                 if not is_valid_reading(distance):
                     time.sleep(0.5)
@@ -276,6 +424,8 @@ def run(simulate=False, test_image=None):
 
             # --- Triggered ---
             last_trigger_time = time.time()
+            mark_current_reminder_handled()
+            reminder_active = False
             unscheduled = not is_within_pill_window()
 
             if unscheduled:
@@ -285,21 +435,19 @@ def run(simulate=False, test_image=None):
 
             lcd_display("pill_time")
 
-            # Capture and classify frames
-            frames = capture_frames(simulate=simulate, test_image=test_image)
-            logger.info(f"Captured {len(frames)} frames, classifying...")
+            # Capture frames
+            frames, archive_dir = capture_frames(simulate=simulate, test_image=test_image)
+            logger.info(f"Captured {len(frames)} frames, sending to Claude as one batch...")
 
-            results = []
-            for frame_path in frames:
-                result = classify_frame(frame_path)
-                if result:
-                    results.append(result)
-                    logger.info(f"  Frame: {result['state']} ({result['confidence']})")
-
-            # Final classification
-            final = final_classification(results)
+            # Single API call — Claude reasons about the whole sequence
+            final = classify_sequence(frames)
             state = final["state"]
             logger.info(f"Final classification: {state} (confidence: {final['confidence']})")
+            logger.info(f"Reason: {final['reason']}")
+
+            # Save result alongside frames for review
+            save_results_log(archive_dir, [], final)
+            logger.info(f"Frames and results saved to {archive_dir}")
 
             # GPIO feedback
             handle_result(state)
@@ -309,9 +457,6 @@ def run(simulate=False, test_image=None):
 
             # Post to backend
             post_event(state, final["confidence"], final["reason"], unscheduled)
-
-            # Cleanup temp frames
-            cleanup_frames(frames)
 
             # Keep result display for 10 seconds then return to idle
             time.sleep(10)

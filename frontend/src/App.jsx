@@ -12,13 +12,18 @@ const NAV_ITEMS = [
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-slate-50">
-        <nav className="bg-white border-b border-slate-200 shadow-sm">
+      <div className="min-h-screen" style={{ background: 'var(--cream)' }}>
+        <nav style={{ background: 'var(--olive)', borderBottom: '1px solid #2a3924' }} className="shadow-lg">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
             <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">💊</span>
-                <span className="text-xl font-bold text-slate-800">PillGuard</span>
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shadow-sm"
+                  style={{ background: 'var(--sage)' }}
+                >
+                  💊
+                </div>
+                <span className="text-xl font-bold text-white tracking-tight">PillGuard</span>
               </div>
               <div className="flex gap-1">
                 {NAV_ITEMS.map(({ to, label }) => (
@@ -27,11 +32,14 @@ function App() {
                     to={to}
                     end={to === '/'}
                     className={({ isActive }) =>
-                      `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      `px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                         isActive
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-slate-600 hover:bg-slate-100'
+                          ? 'text-white'
+                          : 'text-green-200 hover:text-white hover:bg-white/10'
                       }`
+                    }
+                    style={({ isActive }) =>
+                      isActive ? { background: 'var(--sage-dark)' } : {}
                     }
                   >
                     {label}
@@ -41,7 +49,7 @@ function App() {
             </div>
           </div>
         </nav>
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/history" element={<History />} />
