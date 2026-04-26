@@ -1,5 +1,7 @@
 # PillGuard
 
+link to project video: https://www.youtube.com/watch?v=BdO7LEJNPOE&feature=youtu.be
+
 > A smart medication dispenser that watches over elderly patients — and calls for help when something goes wrong.
 
 PillGuard pairs a Raspberry Pi with Claude Vision to answer one simple question every time a pill box is opened: **did the patient actually take their medication, or is something wrong?**
