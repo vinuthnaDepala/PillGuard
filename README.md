@@ -242,4 +242,4 @@ Press ENTER to simulate a box opening. The rest of the pipeline (Claude call, ba
 
 ---
 
-*Built at a hackathon with a Pi, a pill box, and a lot of duct tape.*
+*Built at a hackathon with a Pi, a pill box, and a lot of duct tape.* lol
